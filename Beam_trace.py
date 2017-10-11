@@ -17,21 +17,35 @@ from math import *
 class surface:
     """ Spherical surface  """
     #center=np.array([0,0,2.])
-    C=0.001    #1/Radius of curvature
-    n=1      #index of refraction
-    d=50     #diameter of the lens
-    pos=0    #position (Point where surface intersects z-Axis)
-    n0=1     #index of refraction before surface
-    k=0
-    def __init__(self,pos=1,curv=1E-20,n0=1.5,n2=1,diameter=50):
+    #C=0.001    #1/Radius of curvature
+    #n=1      #index of refraction
+    #d=50     #diameter of the lens
+       #position (Point where surface intersects z-Axis)
+    #n0=1     #index of refraction before surface
+    #k=0
+    #DISZ = 
+    def __init__(self,disz=1,curv=1E-20,n0=1.5,n2=1,diameter=50,system=None):
+        self.system=system  #pionting to the list of surfaces
         self.d=diameter
-        self.n=n2
+        self.n=n2                   #index of refraction after lens
         self.n0=n0
-        self.pos=pos
+        self.DISZ=disz              #distance to next lens
         self.set_Curv(curv)
+        self.system=system
+        self.k=0
+    def pos(self):
+        idx=self.system.index(self)
+        if idx>0:
+            prev=self.system[idx-1]
+            if abs(prev.DISZ)==inf:
+                return prev.pos()
+            else:
+                return prev.pos()+prev.DISZ
+        else: 
+            return 0
     def center(self):
         """ Return center of sphere"""
-        return np.array([0,0,1/self.C+self.pos])
+        return np.array([0,0,1/self.C+self.pos()])
     def set_Power(self,power):
         """sets the refraction power. The radius is then (n2-n0)/power """
         n2=self.n
@@ -46,16 +60,17 @@ class surface:
         return 1/self.C
     def normal(self,points):   
         """return surface normals at points=[p1,p2,...,pn] where pi are points on surface """
-        v=points-self.center()
-        return (v.T/np.linalg.norm(v,axis=1)).T*np.sign(self.C)
+        ez=np.array([[0,0,1]])
+        v=((points-self.pos()*ez)*self.C-ez)
+        return (v/np.linalg.norm(v,axis=1)[:,np.newaxis])#*np.sign(self.C)
     def plot(self,**kwargs):
-        R=self.R()
+        #R=self.R()
         C=self.C
         k=self.k
-        ylim=min(abs(R)*0.95,self.d/2)
-        y=np.linspace(self.center()[1]-ylim,self.center()[1]+ylim,100)
-        z=self.center()[2]-np.sign(R)*np.sqrt(R**2-y**2)
-        #z=C*y**2/(1+np.sqrt(1-(1+k)*C**2*R**2))+self.pos
+        ylim=1/max(abs(C)*1.05,2/self.d)
+        y=np.linspace(-ylim,+ylim,100)
+        #z=self.center()[2]-np.sign(c)*np.sqrt(R**2-y**2)
+        z=C*y**2/(1+np.sqrt(1-(1+k)*C**2*y**2))+self.pos()
         plt.plot(z,y,**kwargs)
         
     #a beam is defined as q the position and P the direction
@@ -91,14 +106,14 @@ class beam_field:
     def normalize_U(self):
         self.U=self.U/np.linalg.norm(self.U,axis=2)[:,:,np.newaxis]
     def Kingslake_Qabs(self,surfaces):
-        pos=np.array([s.pos for s in surfaces])
+        pos=np.array([s.pos() for s in surfaces])
         Q=self.Q_p[:-1]
         U=self.U[:-1]/np.linalg.norm(self.U[:-1],axis=2)[:,:,np.newaxis]
         A=np.array([0,0,1])*pos[:,np.newaxis,np.newaxis]
         Q=Q+np.sum((A-Q)*U,2)[:,:,np.newaxis]*U
         return(np.linalg.norm(Q-A,axis=2))
     def Kingslake_Q_abs(self,surfaces):
-        pos=np.array([s.pos for s in surfaces])
+        pos=np.array([s.pos() for s in surfaces])
         Q=self.Q_p[1:]
         U=self.U[1:]/np.linalg.norm(self.U[1:],axis=2)[:,:,np.newaxis]
         A=np.array([0,0,1])*pos[:,np.newaxis,np.newaxis]
@@ -109,14 +124,21 @@ class beam_field:
         U=self.U[-1]
         U=U/np.linalg.norm(U,axis=1)[:,np.newaxis] 
         Q=self.Q_p[-1]
-        QC=surface.center()-Q
-        QCP=np.sum(QC*U,1)    #U normalized
-        QC2=np.sum(QC*QC,1) 
-        P2=np.sum(U*U,1)
+ #       QC=surface.center()-Q
+ #       QCP=np.sum(QC*U,1)    #U normalized
+#        QC2=np.sum(QC*QC,1) 
+#        P2=np.sum(U*U,1)
         
-        a=(QCP-np.sign(surface.R())*np.sqrt(QCP*QCP+P2*(surface.R()**2-QC2)))/P2
-        
-        return (U.T*a).T+Q
+#        a=(QCP-np.sign(surface.R())*np.sqrt(QCP*QCP+P2*(surface.R()**2-QC2)))/P2
+        #variante 2
+        C=surface.C
+        a=surface.pos()                     #For P= surface point, C1=center of curv, A surface axis crossing
+        ez=np.array([[0,0,1]])              #   which is then solved as d=r(X-sqrt(X**2-Y/R)) with x,Y helper functions
+        X=U[:,2]-(np.sum(Q*U,1)-a*U[:,2])*C #X = helper coordinate 
+        Y= np.sum((Q-a*ez)**2,axis=1)*C-2*(Q[:,2]-a)
+        d=Y/(X+np.sqrt(X**2-C*Y))
+        return U*d[:,np.newaxis]+Q
+#        return (U.T*a).T+Q
     def refract(self,s,points):    
         #n0 index of refraction before surface
         #s surface at which the refraction takes place 
@@ -182,7 +204,7 @@ class paraxial:
         nn=np.array([surfaces[0].n0])
         pos=0
         for s in surfaces:
-            d=s.pos-pos
+            d=s.pos()-pos
             c=s.C
             n=s.n0
             n_=s.n  
@@ -192,7 +214,7 @@ class paraxial:
             nu_=nu[-1]+y[-1]*(n_-n)*c
             self.i=np.append(self.i,[y[-1]*c-nu[-1]/n])
             nu=np.append(nu,[nu_])
-            pos=s.pos
+            pos=s.pos()
             nn=np.append(nn,[n_])
         self.nu=nu
         self.y=y
@@ -221,6 +243,7 @@ class lens_system:
     def add_surface(self,s):
         """add a surface to the system. Surfacess must be added ordered by their z value."""
         self.surfaces.append(s)
+        s.system=self.surfaces
     def plot(self,**kwargs):
         for s in self.surfaces:
             s.plot(**kwargs)
