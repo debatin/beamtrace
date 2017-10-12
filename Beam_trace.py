@@ -24,11 +24,10 @@ class surface:
     #n0=1     #index of refraction before surface
     #k=0
     #DISZ = 
-    def __init__(self,disz=1,curv=1E-20,n0=1.5,n2=1,diameter=50,system=None):
+    def __init__(self,disz=1,curv=1E-20,n2=1,diameter=50,system=None):
         self.system=system  #pionting to the list of surfaces
         self.d=diameter
         self.n=n2                   #index of refraction after lens
-        self.n0=n0
         self.DISZ=disz              #distance to next lens
         self.set_Curv(curv)
         self.system=system
@@ -46,15 +45,14 @@ class surface:
     def center(self):
         """ Return center of sphere"""
         return np.array([0,0,1/self.C+self.pos()])
-    def set_Power(self,power):
-        """sets the refraction power. The radius is then (n2-n0)/power """
-        n2=self.n
-        n0=self.n0
-        self.C=1/((n2-n0+1E-30)/(power+1.E-40))
+    #def set_Power(self,power):
+    #    """sets the refraction power. The radius is then (n2-n0)/power """
+        #n2=self.n
+        #n0=self.n0
+        #self.C=1/((n2-n0+1E-30)/(power+1.E-40))
     def set_Curv(self,curv):
         """sets the refraction power. The radius is then (n2-n0)/power """
-        n2=self.n
-        n0=self.n0
+        #n0=self.n0
         self.C=(curv+1.E-40)
     def R(self):
         return 1/self.C
@@ -201,12 +199,13 @@ class paraxial:
         y=self.y[[0]]
         nu=self.nu[[0]]
         self.i=self.i[[0]]
-        nn=np.array([surfaces[0].n0])
+        nn=np.array([1])
         pos=0
+        
         for s in surfaces:
             d=s.pos()-pos
             c=s.C
-            n=s.n0
+            n=nn[-1]
             n_=s.n  
             y_=y[-1]-d/n*nu[-1]
             y=np.append(y,[y_])
