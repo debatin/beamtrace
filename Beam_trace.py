@@ -90,6 +90,19 @@ class beam_field:
         self.Q_p=np.array([np.array([xv.flatten(),yv.flatten(),np.zeros(nx*ny)]).T])        
         self.U=np.array([np.tile(np.array([0,u,1])/np.sqrt(u**2+1),(nx*ny,1))])
         self.normalize_U()
+    def circular_pencil(self,n,d,pos,tip):
+        """ creates a circular pencil beam field. 
+        n circles of beams with 6*n beams in each circle start from tip=[px,py,pz]
+        and have a diameter d at position pos
+        """
+        points=[[0,0,pos]]
+        if n>0:
+            r=d/2./n     
+            b=[[sin(j)*r*i,cos(j)*r*i,pos] for i in range(1,n+1) for j in np.arange(0,2*pi,2*pi/6/i)]      
+            points.extend(b)    
+        self.Q_p=np.array([points])
+        self.U=self.Q_p-tip
+        self.normalize_U()
     def single_beam_from_Kingslake_Q(self,Qk,Uk):
         """ Create a single beam according to Q values defined
         Q=distance from  point where surface intersects with axis
@@ -183,7 +196,27 @@ class beam_field:
         #print(((z-Q[-2,:,[2]])/P[-2,:,[2]]).T)
         #print(P[-2])
         return ((z-Q[-2,:,[2]])/U[-2,:,[2]]).T*U[-2]+Q[-2]
-        
+       
+    def circle_of_least_confusion(self,start):
+        """Circle of least confusion also termed \Sigma_{LC}"""
+        def f(x):
+            pl=self.project_onto_plane(x)
+            return max(pl[:,1])-min(pl[:,1])
+
+ #       m=self.marginal_ray
+        if hasattr(self, 'start'):
+            start=self.start
+        else:
+#            start=(m.Q_p[-1,0,2]-m.Q_p[-2,0,2])/2
+            start=start
+        print(start)
+        res=minimize(f,(start), method='Nelder-Mead')
+        self.start=res.final_simplex[0][0,0]
+
+        return res.final_simplex[0][0,0],res.final_simplex[1][0]
+
+
+ 
 class paraxial:
     """Paraxial beam tracing"""
     y=np.array([1.])
@@ -225,20 +258,21 @@ class paraxial:
 from scipy.optimize import minimize
 class lens_system:  
     """ Handle a whole system of lenses"""
-    surfaces=[]
+    #surfaces=[]
     """list containing the surfaces of the lens system"""
-    entrance_pupil=11
+    #entrance_pupil=11
     """diameter of entrance pupil"""
     marginal_ray=beam_field()
     """marginal_ray"""
-    n_init=1
+    #n_init=1
     def __init__(self,pupil=20):
         """
         Parameters
             pupil:  diameter of entrance pupil
         """
         self.entrance_pupil=pupil
-    
+        self.surfaces=[]
+        self.n_init=1
     def add_surface(self,s):
         """add a surface to the system. Surfacess must be added ordered by their z value."""
         self.surfaces.append(s)
@@ -275,11 +309,13 @@ class lens_system:
             pl=ff.project_onto_plane(x)
             return max(pl[:,1])
             
-        m=self.marginal_ray
+ #       m=self.marginal_ray
         if hasattr(self, 'start'):
             start=self.start
         else:
-            start=(m.Q_p[-1,0,2]-m.Q_p[-2,0,2])/2
+#            start=(m.Q_p[-1,0,2]-m.Q_p[-2,0,2])/2
+            start=(self.surfaces[-1].pos()-self.surfaces[-2].pos())/2
+        #print(start)
         res=minimize(f,(start), method='Nelder-Mead')
         self.start=res.final_simplex[0][0,0]
         
@@ -315,7 +351,7 @@ class lens_system:
         
         i2,x2=bf.calculate_intersections(bf.U[:,[0]],bf.Q_p[:,[0]],bf.U[:,[2]],bf.Q_p[:,[2]])
         
-        print(i[:,:,2]-i2[:,:,2])
+        #print(i[:,:,2]-i2[:,:,2])
     def OSC(self,u):
         """angle tan: tangens of the paraxial beam angle u"""
         pr=paraxial(0,u)
@@ -371,5 +407,23 @@ class lens_system:
         #print('spherical LA contribution',LA)
         #print('sum',sum(LA))
         return LA
+    def reverse(self):
+        """reverses the system such that the first surface is the last"""
+        sl=self.surfaces
+        DISZ=sl[0].DISZ
+        n=sl[0].n
+
+        for s in sl[1:]:
+            d=s.DISZ
+            n0=s.n
+            s.DISZ=DISZ
+            s.n=n
+            s.C*=-1
+            DISZ=d
+            n=n0
         
+        sr=sl[::-1]
+        a=[s for s in sr]
+        self.surfaces.reverse()
+        #print('done...')
 
