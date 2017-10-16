@@ -303,7 +303,7 @@ class lens_system:
     def circle_of_least_confusion(self):
         """Circle of least confusion also termed \Sigma_{LC}"""
         ff=beam_field()        
-        ff.rectangular_grid(1,500,self.entrance_pupil)
+        ff.rectangular_grid(1,2000,self.entrance_pupil)
         ff.propagate(self.surfaces)
         def f(x):
             pl=ff.project_onto_plane(x)
